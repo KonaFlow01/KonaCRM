@@ -78,7 +78,7 @@ interface MetaApiError {
 // CONSTANTS
 // =============================================================================
 
-const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
+const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
 // =============================================================================
 // PROVIDER IMPLEMENTATION

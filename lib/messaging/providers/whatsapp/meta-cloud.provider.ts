@@ -200,7 +200,7 @@ interface MetaTemplateComponentData {
 // CONSTANTS
 // =============================================================================
 
-const META_GRAPH_URL = 'https://graph.facebook.com/v18.0';
+const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
 // =============================================================================
 // PROVIDER IMPLEMENTATION

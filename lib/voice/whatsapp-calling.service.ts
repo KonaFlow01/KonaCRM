@@ -11,7 +11,7 @@
 // Constants
 // =============================================================================
 
-const META_GRAPH_VERSION = 'v23.0';
+const META_GRAPH_VERSION = 'v25.0';
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
 // =============================================================================
