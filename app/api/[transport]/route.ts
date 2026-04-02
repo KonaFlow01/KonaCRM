@@ -3,6 +3,7 @@ import { authPublicApi } from '@/lib/public-api/auth';
 import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 import { registerExistingCrmTools } from '@/lib/mcp/registerTools';
 import { registerMessagingTools } from '@/lib/mcp/tools/messaging';
+import { registerAITools } from '@/lib/mcp/tools/ai';
 import { mcpContextStorage } from '@/lib/mcp/context';
 
 export const runtime = 'nodejs';
@@ -42,6 +43,7 @@ const mcpHandler = createMcpHandler(
   (server) => {
     registerExistingCrmTools(server);
     registerMessagingTools(server);
+    registerAITools(server);
   },
   undefined,
   {

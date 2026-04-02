@@ -248,6 +248,51 @@ export const CRM_TOOL_CATALOG = {
     description:
       'Initiates a template sync with the provider (Meta). Requires Meta API credentials — must be done via the web UI.',
   },
+
+  // ── AI & HITL ─────────────────────────────────────────────────────────────
+
+  listHITL: {
+    name: 'crm.ai.hitl.list',
+    title: 'List HITL pending stage advances',
+    description:
+      'Read-only. Lists AI-suggested stage advances awaiting human review. Defaults to status="pending". Joins deals for title. Scoped to the authenticated organization.',
+  },
+  countHITL: {
+    name: 'crm.ai.hitl.count',
+    title: 'Count HITL pending stage advances',
+    description:
+      'Read-only. Returns the count of AI-suggested stage advances filtered by status (default: "pending"). Scoped to the authenticated organization.',
+  },
+  resolveHITL: {
+    name: 'crm.ai.hitl.resolve',
+    title: 'Resolve HITL pending stage advance',
+    description:
+      'Writes data. Approves or rejects an AI-suggested stage advance. On approval, moves the deal to the target stage. Scoped to the authenticated organization.',
+  },
+  aiDailyBriefing: {
+    name: 'crm.ai.daily_briefing',
+    title: 'Get daily AI briefing',
+    description:
+      'Read-only. Aggregates a daily operations briefing: overdue activities, recent open deals, and pending HITL count. Scoped to the authenticated organization.',
+  },
+  aiMeetingBriefing: {
+    name: 'crm.ai.meeting_briefing',
+    title: 'Generate meeting briefing',
+    description:
+      'Calls AI. Generates a pre-meeting briefing for a deal using the BANT framework. Analyzes conversation history and returns actionable insights. Scoped to the authenticated organization.',
+  },
+  aiPatternsList: {
+    name: 'crm.ai.patterns.list',
+    title: 'List AI learned patterns',
+    description:
+      'Read-only. Lists few-shot learned patterns for the authenticated organization. Used to improve AI response quality.',
+  },
+  aiMetrics: {
+    name: 'crm.ai.metrics',
+    title: 'Get AI conversation metrics',
+    description:
+      'Read-only. Aggregates AI conversation logs for the last 30 days: count by action, total tokens, breakdown by model, and daily activity. Scoped to the authenticated organization.',
+  },
 } as const satisfies Record<string, CrmToolCatalogEntry>;
 
 export type CrmInternalToolKey = keyof typeof CRM_TOOL_CATALOG;
