@@ -189,6 +189,8 @@ export interface ConversationView extends MessagingConversation {
   /** Channel info */
   channelType: ChannelType;
   channelName: string;
+  /** Channel provider (e.g. 'z-api', 'meta-cloud', 'resend'). Window expiry only applies to 'meta-cloud'. */
+  channelProvider?: string;
   /** Contact info (if linked) */
   contactName?: string;
   contactEmail?: string;
@@ -504,8 +506,11 @@ export function transformMessage(db: DbMessagingMessage): MessagingMessage {
 
 /**
  * Check if conversation window is expired.
+ * Only applies to WhatsApp via official Meta Cloud API ('meta-cloud' provider).
+ * Unofficial providers (z-api, etc.) have no 24h window restriction.
  */
-export function isWindowExpired(conversation: MessagingConversation): boolean {
+export function isWindowExpired(conversation: MessagingConversation, channelProvider?: string): boolean {
+  if (channelProvider && channelProvider !== 'meta-cloud') return false;
   if (!conversation.windowExpiresAt) return false;
   return new Date(conversation.windowExpiresAt) < new Date();
 }

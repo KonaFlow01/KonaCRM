@@ -612,8 +612,8 @@ async function handleInboundMessage(
         contact_id: contactId,
         status: "open",
         priority: "normal",
-        // WhatsApp 24h window starts when customer sends message
-        window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        // Z-API does not have a 24h response window restriction (unofficial API)
+        // window_expires_at intentionally omitted
       })
       .select("id")
       .single();
@@ -669,8 +669,7 @@ async function handleInboundMessage(
       last_message_at: timestamp.toISOString(),
       last_message_preview: getMessagePreview(content),
       last_message_direction: "inbound",
-      // Reset 24h window on new inbound message
-      window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      // Z-API has no 24h window — do not set window_expires_at
       // Reopen if resolved
       status: "open",
     })

@@ -58,7 +58,8 @@ export function useMessagingConversations(filters?: ConversationFilters) {
           channel:messaging_channels!channel_id (
             id,
             channel_type,
-            name
+            name,
+            provider
           ),
           contact:contacts!contact_id (
             id,
@@ -113,7 +114,7 @@ export function useMessagingConversations(filters?: ConversationFilters) {
       // Transform to ConversationView
       return (data || []).map((row) => {
         const base = transformConversation(row);
-        const channel = row.channel as { id?: string; channel_type?: string; name?: string } | null;
+        const channel = row.channel as { id?: string; channel_type?: string; name?: string; provider?: string } | null;
         const contact = row.contact as { id?: string; name?: string; email?: string; phone?: string; ai_paused?: boolean } | null;
         const assignedUser = row.assigned_user as { id?: string; name?: string; avatar?: string } | null;
 
@@ -121,13 +122,14 @@ export function useMessagingConversations(filters?: ConversationFilters) {
           ...base,
           channelType: channel?.channel_type as ConversationView['channelType'],
           channelName: channel?.name || '',
+          channelProvider: channel?.provider,
           contactName: contact?.name,
           contactEmail: contact?.email,
           contactPhone: contact?.phone,
           contactAiPaused: contact?.ai_paused ?? false,
           assignedUserName: assignedUser?.name,
           assignedUserAvatar: assignedUser?.avatar,
-          isWindowExpired: isWindowExpired(base),
+          isWindowExpired: isWindowExpired(base, channel?.provider),
           windowMinutesRemaining: getWindowMinutesRemaining(base),
         };
       });
@@ -222,6 +224,7 @@ export function useMessagingConversation(conversationId: string | undefined) {
             avatar,
             ai_paused
           ),
+
           assigned_user:profiles!assigned_user_id (
             id,
             name,
@@ -237,7 +240,7 @@ export function useMessagingConversation(conversationId: string | undefined) {
       }
 
       const base = transformConversation(data);
-      const channel = data.channel as { id?: string; channel_type?: string; name?: string } | null;
+      const channel = data.channel as { id?: string; channel_type?: string; name?: string; provider?: string } | null;
       const contact = data.contact as { id?: string; name?: string; email?: string; phone?: string; ai_paused?: boolean } | null;
       const assignedUser = data.assigned_user as { id?: string; name?: string; avatar?: string } | null;
 
@@ -245,6 +248,7 @@ export function useMessagingConversation(conversationId: string | undefined) {
         ...base,
         channelType: channel?.channel_type as ConversationView['channelType'],
         channelName: channel?.name || '',
+        channelProvider: channel?.provider,
         contactName: contact?.name,
         contactEmail: contact?.email,
         contactPhone: contact?.phone,
