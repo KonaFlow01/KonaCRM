@@ -388,7 +388,7 @@ export async function processIncomingMessage(
   if (context.stats.ai_messages_count >= config.settings.max_messages_per_conversation) {
     return {
       success: true,
-      decision: await handleHandoff(supabase, conversationId, organizationId, context, 'Limite de mensagens atingido'),
+      decision: await handleHandoff(supabase, conversationId, organizationId, context, 'Limite de mensagens atingido', incomingMessage),
     };
   }
 
@@ -402,50 +402,24 @@ export async function processIncomingMessage(
         conversationId,
         organizationId,
         context,
-        `Keyword de handoff detectada: "${handoffKeyword}"`
+        `Keyword de handoff detectada: "${handoffKeyword}"`,
+        incomingMessage,
       ),
     };
   }
 
   // 7.5. Verificar notify_team — handoff automático por configuração de estágio
   if (config.notify_team) {
-    const handoffDecision = await handleHandoff(
-      supabase,
-      conversationId,
-      organizationId,
-      context,
-      'Estágio configurado para notificar equipe (notify_team)'
-    );
-
-    // Fetch Telegram credentials and fire notification (fire-and-forget on error)
-    const { data: orgTelegram } = await supabase
-      .from('organization_settings')
-      .select('telegram_bot_token, telegram_chat_id')
-      .eq('organization_id', organizationId)
-      .maybeSingle();
-
-    if (orgTelegram?.telegram_bot_token && orgTelegram?.telegram_chat_id) {
-      const { sendTelegramMessage, formatHandoffMessage } = await import('@/lib/notifications/telegram');
-      const message = formatHandoffMessage({
-        contactName: context.contact?.name ?? 'Lead',
-        dealTitle: context.deal?.title ?? 'Deal',
-        stageName: context.stage.name,
-        lastMessage: incomingMessage,
-        appUrl: process.env.NEXT_PUBLIC_APP_URL,
-        dealId: context.deal?.id,
-      });
-      await sendTelegramMessage(
-        orgTelegram.telegram_bot_token,
-        orgTelegram.telegram_chat_id,
-        message
-      ).catch((err: unknown) => {
-        console.error('[AIAgent] Failed to send Telegram handoff notification:', err);
-      });
-    }
-
     return {
       success: true,
-      decision: handoffDecision,
+      decision: await handleHandoff(
+        supabase,
+        conversationId,
+        organizationId,
+        context,
+        'Estágio configurado para notificar equipe (notify_team)',
+        incomingMessage,
+      ),
     };
   }
 
@@ -836,7 +810,8 @@ async function handleHandoff(
   conversationId: string,
   organizationId: string,
   context: LeadContext,
-  reason: string
+  reason: string,
+  lastMessage?: string,
 ): Promise<AgentDecision> {
   const now = new Date().toISOString();
 
@@ -906,6 +881,34 @@ async function handleHandoff(
     console.error('[AIAgent] Failed to broadcast handoff notification:', err);
   } finally {
     supabase.removeChannel(channel);
+  }
+
+  // Send Telegram notification (fire-and-forget)
+  if (lastMessage) {
+    const { data: orgTelegram } = await supabase
+      .from('organization_settings')
+      .select('telegram_bot_token, telegram_chat_id')
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (orgTelegram?.telegram_bot_token && orgTelegram?.telegram_chat_id) {
+      const { sendTelegramMessage, formatHandoffMessage } = await import('@/lib/notifications/telegram');
+      const message = formatHandoffMessage({
+        contactName: context.contact?.name ?? 'Lead',
+        dealTitle: context.deal?.title ?? 'Deal',
+        stageName: context.stage.name,
+        lastMessage,
+        appUrl: process.env.NEXT_PUBLIC_APP_URL,
+        dealId: context.deal?.id,
+      });
+      await sendTelegramMessage(
+        orgTelegram.telegram_bot_token,
+        orgTelegram.telegram_chat_id,
+        message
+      ).catch((err: unknown) => {
+        console.error('[AIAgent] Failed to send Telegram handoff notification:', err);
+      });
+    }
   }
 
   return {
