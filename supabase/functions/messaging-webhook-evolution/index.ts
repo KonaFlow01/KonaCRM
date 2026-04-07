@@ -262,7 +262,7 @@ Deno.serve(async (req) => {
     .select("id, organization_id, business_unit_id, external_identifier, status")
     .eq("provider", "evolution")
     .eq("external_identifier", instanceName)
-    .eq("status", "active")
+    .in("status", ["connected", "active"])
     .maybeSingle();
 
   if (channelErr) {
