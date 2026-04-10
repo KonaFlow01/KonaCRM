@@ -114,6 +114,9 @@ export async function runSchemaMigration(dbUrl: string) {
       // NOTE: Supabase DB uses TLS; on some networks a MITM/corporate proxy can inject a cert chain
       // that Node doesn't trust. For the installer/migrations step we prefer "no-verify" over failure.
       ssl: needsSsl(dbUrl) ? { rejectUnauthorized: false } : undefined,
+      // Fail fast on auth errors or unreachable hosts instead of hanging silently.
+      connectionTimeoutMillis: 15_000,
+      query_timeout: 30_000,
     });
 
   const client = await connectClientWithRetry(createClient, { maxAttempts: 5, initialDelayMs: 3000 });
