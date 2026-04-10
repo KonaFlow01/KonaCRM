@@ -445,12 +445,33 @@ export async function POST(req: Request) {
         
         if (!skippedSteps.includes('migrations')) {
           await sendPhase('migrations', 0);
-          
+
+          // Always refresh the CLI login-role token right before migrations.
+          // The token obtained by the wizard UI may have expired (typical TTL ~300s)
+          // by the time the install pipeline reaches this step.
+          let migrationDbUrl = resolvedDbUrl;
+          if (resolvedAccessToken && resolvedProjectRef) {
+            try {
+              const freshDb = await resolveSupabaseDbUrlViaCliLoginRole({
+                projectRef: resolvedProjectRef,
+                accessToken: resolvedAccessToken,
+              });
+              if (freshDb.ok) {
+                migrationDbUrl = freshDb.dbUrl;
+                console.log('[run-stream] migrations: using fresh CLI login-role URL');
+              } else {
+                console.warn('[run-stream] migrations: failed to refresh DB URL, using existing:', freshDb.error);
+              }
+            } catch (e) {
+              console.warn('[run-stream] migrations: error refreshing DB URL, using existing:', e);
+            }
+          }
+
           // runSchemaMigration internally waits for storage - with retry
           await withRetry(
             'migrations',
             async () => {
-              await runSchemaMigration(resolvedDbUrl);
+              await runSchemaMigration(migrationDbUrl);
             },
             sendEvent,
             (err) => {
