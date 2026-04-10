@@ -1105,65 +1105,67 @@ export default function InstallWizardPage() {
         
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
+          let event: Record<string, unknown>;
           try {
-            const event = JSON.parse(line.slice(6));
-            
-            if (event.type === 'phase') {
-              // 🎮 Salva checkpoint a cada fase
-              const stepId = event.phase ? PHASE_TO_STEP[event.phase] : null;
-              const current = installStateRef.current;
-              if (stepId && current) {
-                const updated = updateStepStatus(current, stepId, 'running');
-                commitInstallState(updated);
-              }
-              // UI: mostra etapa (mais prescritivo que só %)
-              const explicitStepId = typeof event.stepId === 'string' ? event.stepId : null;
-              if (explicitStepId) {
-                setCineStepLabel(STEP_LABELS[explicitStepId] || explicitStepId);
-              } else {
-                setCineStepLabel('');
-              }
-              setCineMessage(event.title || 'Processando...');
-              setCineSubtitle(event.subtitle || '');
-              setCineProgress(event.progress || 0);
-            } else if (event.type === 'vercel_deploy') {
-              const id = typeof event.deploymentId === 'string' ? event.deploymentId : null;
-              if (id) {
-                setVercelDeploymentId(id);
-                localStorage.setItem(STORAGE_VERCEL_DEPLOYMENT_ID, id);
-              }
-            } else if (event.type === 'step_complete') {
-              const stepId = String(event.stepId || '');
-              const current = installStateRef.current;
-              if (stepId && current) {
-                const updated = updateStepStatus(current, stepId, 'completed');
-                commitInstallState(updated);
-              }
-            } else if (event.type === 'retry') {
-              // Show retry feedback without interrupting flow
-              const retryMsg = `Tentativa ${event.retryCount}/${event.maxRetries}...`;
-              setCineSubtitle(retryMsg);
-              console.log(`[wizard] Retry: ${event.stepId} - ${retryMsg}`);
-            } else if (event.type === 'skip') {
-              // Log skipped steps
-              console.log('[wizard] Skipped steps:', event.skipped);
-            } else if (event.type === 'complete' && event.ok) {
-              setCineProgress(100);
-              setCineMessage(event.title || `Missão cumprida, ${firstName}!`);
-              setCineSubtitle('Aterrissagem confirmada');
-              await new Promise((r) => setTimeout(r, 800));
-              setCinePhase('success');
-              setCineSubtitle(event.subtitle || 'Bem-vindo ao novo mundo.');
-              setResult({ ok: true, steps: [] });
-              // 🎮 Limpa o save game - instalação completa!
-              clearInstallState();
-              commitInstallState(null);
-              localStorage.removeItem(STORAGE_VERCEL_DEPLOYMENT_ID);
-            } else if (event.type === 'error') {
-              throw new Error(event.error || 'Erro durante a instalação');
+            event = JSON.parse(line.slice(6));
+          } catch {
+            console.warn('SSE JSON parse error, skipping line');
+            continue;
+          }
+
+          if (event.type === 'phase') {
+            // 🎮 Salva checkpoint a cada fase
+            const stepId = event.phase ? PHASE_TO_STEP[event.phase as string] : null;
+            const current = installStateRef.current;
+            if (stepId && current) {
+              const updated = updateStepStatus(current, stepId, 'running');
+              commitInstallState(updated);
             }
-          } catch (parseErr) {
-            console.warn('SSE parse error:', parseErr);
+            // UI: mostra etapa (mais prescritivo que só %)
+            const explicitStepId = typeof event.stepId === 'string' ? event.stepId : null;
+            if (explicitStepId) {
+              setCineStepLabel(STEP_LABELS[explicitStepId] || explicitStepId);
+            } else {
+              setCineStepLabel('');
+            }
+            setCineMessage((event.title as string) || 'Processando...');
+            setCineSubtitle((event.subtitle as string) || '');
+            setCineProgress((event.progress as number) || 0);
+          } else if (event.type === 'vercel_deploy') {
+            const id = typeof event.deploymentId === 'string' ? event.deploymentId : null;
+            if (id) {
+              setVercelDeploymentId(id);
+              localStorage.setItem(STORAGE_VERCEL_DEPLOYMENT_ID, id);
+            }
+          } else if (event.type === 'step_complete') {
+            const stepId = String(event.stepId || '');
+            const current = installStateRef.current;
+            if (stepId && current) {
+              const updated = updateStepStatus(current, stepId, 'completed');
+              commitInstallState(updated);
+            }
+          } else if (event.type === 'retry') {
+            // Show retry feedback without interrupting flow
+            const retryMsg = `Tentativa ${event.retryCount}/${event.maxRetries}...`;
+            setCineSubtitle(retryMsg);
+            console.log(`[wizard] Retry: ${event.stepId} - ${retryMsg}`);
+          } else if (event.type === 'skip') {
+            // Log skipped steps
+            console.log('[wizard] Skipped steps:', event.skipped);
+          } else if (event.type === 'complete' && event.ok) {
+            setCineProgress(100);
+            setCineMessage((event.title as string) || `Missão cumprida, ${firstName}!`);
+            setCineSubtitle('Aterrissagem confirmada');
+            await new Promise((r) => setTimeout(r, 800));
+            setCinePhase('success');
+            setCineSubtitle((event.subtitle as string) || 'Bem-vindo ao novo mundo.');
+            setResult({ ok: true, steps: [] });
+            // 🎮 Limpa o save game - instalação completa!
+            clearInstallState();
+            commitInstallState(null);
+            localStorage.removeItem(STORAGE_VERCEL_DEPLOYMENT_ID);
+          } else if (event.type === 'error') {
+            throw new Error((event.error as string) || 'Erro durante a instalação');
           }
         }
       }
