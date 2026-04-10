@@ -4,6 +4,10 @@ import { Client } from 'pg';
 
 const SCHEMA_PATH = path.resolve(process.cwd(), 'supabase/migrations/20251201000000_schema_init.sql');
 
+export function readSchemaSql(): string {
+  return fs.readFileSync(SCHEMA_PATH, 'utf8');
+}
+
 function needsSsl(connectionString: string) {
   return !/sslmode=disable/i.test(connectionString);
 }
@@ -90,8 +94,20 @@ async function waitForStorageReady(client: Client, opts?: { timeoutMs?: number; 
       );
       const ready = Boolean(r?.rows?.[0]?.ready);
       if (ready) return;
-    } catch {
-      // keep polling on transient errors
+    } catch (err) {
+      // Erros fatais (autenticação, permissão, conexão encerrada) não devem ser
+      // silenciados — propagamos imediatamente para não mascarar falhas reais.
+      const msg = err instanceof Error ? err.message : String(err);
+      const isFatal =
+        msg.includes('password authentication failed') ||
+        msg.includes('FATAL') ||
+        msg.includes('authentication failed') ||
+        msg.includes('Connection terminated') ||
+        msg.includes('connection terminated') ||
+        msg.includes('SSL') ||
+        msg.includes('permission denied for');
+      if (isFatal) throw err;
+      // Erros transientes (storage ainda não provisionado): continua polling
     }
     await sleep(pollMs);
   }

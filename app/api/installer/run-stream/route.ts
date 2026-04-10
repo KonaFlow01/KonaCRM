@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isAllowedOrigin } from '@/lib/security/sameOrigin';
-import { runSchemaMigration } from '@/lib/installer/migrations';
+import { runSchemaMigration, readSchemaSql } from '@/lib/installer/migrations';
 import { bootstrapInstance } from '@/lib/installer/supabase';
 import { triggerProjectRedeploy, upsertProjectEnvs, waitForVercelDeploymentReady } from '@/lib/installer/vercel';
 import { validateInstallerPassword } from '@/lib/installer/passwordPolicy';
@@ -10,6 +10,7 @@ import {
   listEdgeFunctionSlugs,
   resolveSupabaseApiKeys,
   resolveSupabaseDbUrlViaCliLoginRole,
+  runSchemaMigrationViaManagementApi,
   setSupabaseEdgeFunctionSecrets,
   waitForSupabaseProjectReady,
   type SupabaseFunctionDeployResult,
@@ -446,41 +447,64 @@ export async function POST(req: Request) {
         if (!skippedSteps.includes('migrations')) {
           await sendPhase('migrations', 0);
 
-          // Always refresh the CLI login-role token right before migrations.
-          // The token obtained by the wizard UI may have expired (typical TTL ~300s)
-          // by the time the install pipeline reaches this step.
-          let migrationDbUrl = resolvedDbUrl;
+          // Estratégia 1: Management API (preferencial)
+          // Não requer conexão pg direta — evita problemas de rede Vercel → pooler
+          // de outras regiões e token CLI temporário expirado.
+          let migrationDone = false;
+
           if (resolvedAccessToken && resolvedProjectRef) {
             try {
-              const freshDb = await resolveSupabaseDbUrlViaCliLoginRole({
+              console.log('[run-stream] migrations: tentando via Management API...');
+              const schemaSql = readSchemaSql();
+              const apiResult = await runSchemaMigrationViaManagementApi({
                 projectRef: resolvedProjectRef,
                 accessToken: resolvedAccessToken,
+                sql: schemaSql,
               });
-              if (freshDb.ok) {
-                migrationDbUrl = freshDb.dbUrl;
-                console.log('[run-stream] migrations: using fresh CLI login-role URL');
+              if (apiResult.ok) {
+                migrationDone = true;
+                console.log('[run-stream] migrations: concluído via Management API');
               } else {
-                console.warn('[run-stream] migrations: failed to refresh DB URL, using existing:', freshDb.error);
+                console.warn('[run-stream] migrations: Management API falhou, tentando pg direto:', apiResult.error);
               }
             } catch (e) {
-              console.warn('[run-stream] migrations: error refreshing DB URL, using existing:', e);
+              console.warn('[run-stream] migrations: erro na Management API, tentando pg direto:', e);
             }
           }
 
-          // runSchemaMigration internally waits for storage - with retry
-          await withRetry(
-            'migrations',
-            async () => {
-              await runSchemaMigration(migrationDbUrl);
-            },
-            sendEvent,
-            (err) => {
-              // Don't retry if it's a schema conflict (already applied)
-              const msg = err instanceof Error ? err.message : '';
-              return !msg.includes('already exists');
+          // Estratégia 2: pg direto com token CLI renovado (fallback)
+          if (!migrationDone) {
+            let migrationDbUrl = resolvedDbUrl;
+            if (resolvedAccessToken && resolvedProjectRef) {
+              try {
+                const freshDb = await resolveSupabaseDbUrlViaCliLoginRole({
+                  projectRef: resolvedProjectRef,
+                  accessToken: resolvedAccessToken,
+                });
+                if (freshDb.ok) {
+                  migrationDbUrl = freshDb.dbUrl;
+                  console.log('[run-stream] migrations: usando URL CLI renovada para pg direto');
+                } else {
+                  console.warn('[run-stream] migrations: falha ao renovar URL CLI:', freshDb.error);
+                }
+              } catch (e) {
+                console.warn('[run-stream] migrations: erro ao renovar URL CLI:', e);
+              }
             }
-          );
-          
+
+            await withRetry(
+              'migrations',
+              async () => {
+                await runSchemaMigration(migrationDbUrl);
+              },
+              sendEvent,
+              (err) => {
+                const msg = err instanceof Error ? err.message : '';
+                return !msg.includes('already exists');
+              }
+            );
+          }
+
           await sendPhase('migrations'); // Complete
         }
         

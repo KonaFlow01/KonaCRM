@@ -427,6 +427,32 @@ export async function createSupabaseProject(params: {
   return { ok: true, projectRef: projectRef.trim(), projectName, response: res.data };
 }
 
+/**
+ * Executa o SQL de migração via Supabase Management API.
+ * Estratégia preferencial para instalações: evita conexão pg direta (token temporário,
+ * problemas de rede Vercel → Supabase pooler de outras regiões).
+ */
+export async function runSchemaMigrationViaManagementApi(params: {
+  projectRef: string;
+  accessToken: string;
+  sql: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await supabaseManagementFetch(
+    `/v1/projects/${encodeURIComponent(params.projectRef)}/database/query`,
+    params.accessToken,
+    {
+      method: 'POST',
+      body: JSON.stringify({ query: params.sql }),
+    }
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true };
+}
+
 export async function pauseSupabaseProject(params: {
   accessToken: string;
   projectRef: string;
