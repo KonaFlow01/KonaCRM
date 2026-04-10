@@ -179,6 +179,7 @@ export default function InstallWizardPage() {
   const [supabasePausingRef, setSupabasePausingRef] = useState<string | null>(null);
   const [needSpaceReason, setNeedSpaceReason] = useState<'global_limit' | 'no_slot' | null>(null);
   const orgProjectNamesCacheRef = useRef<Record<string, string[]>>({});
+  const [supabaseExistingProjects, setSupabaseExistingProjects] = useState<(SupabaseProjectOption & { orgName: string; orgSlug: string; orgPlan: string })[]>([]);
   
   // Preflight
   const [supabasePreflight, setSupabasePreflight] = useState<{
@@ -260,7 +261,7 @@ export default function InstallWizardPage() {
   
   // Wizard - começa no passo 1 (Supabase), pois Vercel já foi validada no /install/start
   const [currentStep, setCurrentStep] = useState(1);
-  const [supabaseUiStep, setSupabaseUiStep] = useState<'pat' | 'deciding' | 'needspace' | 'creating' | 'done'>('pat');
+  const [supabaseUiStep, setSupabaseUiStep] = useState<'pat' | 'deciding' | 'choose' | 'needspace' | 'creating' | 'done'>('pat');
   
   // Install
   const [installing, setInstalling] = useState(false);
@@ -463,6 +464,7 @@ export default function InstallWizardPage() {
     setSupabaseUiStep('pat');
     setSupabasePreflight(null);
     setSupabaseCreateError(null);
+    setSupabaseExistingProjects([]);
   }, [supabaseAccessToken]);
 
   useEffect(() => {
@@ -532,12 +534,34 @@ export default function InstallWizardPage() {
     }
   };
   
-  const decideAndCreate = async (orgs: SupabaseOrgOption[], preflight: typeof supabasePreflight) => {
+  const decideAndCreate = async (_orgs: SupabaseOrgOption[], preflight: typeof supabasePreflight, forceCreate = false) => {
     if (!preflight) return;
-    
+
     console.log('🔍 [SUPABASE] Preflight:', JSON.stringify(preflight, null, 2));
-    
+
     const paidOrg = preflight.organizations.find((o) => (o.plan || '').toLowerCase() !== 'free');
+    const freeOrgWithSlot = preflight.organizations.find(
+      (o) => (o.plan || '').toLowerCase() === 'free' && o.activeCount < 2
+    );
+
+    // Se há projetos existentes e o usuário ainda não escolheu, mostra tela de seleção
+    if (!forceCreate) {
+      const allExisting = preflight.organizations.flatMap((org) =>
+        org.activeProjects.map((p) => ({
+          ...p,
+          orgName: org.name,
+          orgSlug: org.slug,
+          orgPlan: org.plan || 'free',
+        }))
+      );
+      if (allExisting.length > 0) {
+        console.log('🗂️ [SUPABASE] Projetos existentes encontrados. Exibindo tela de escolha.');
+        setSupabaseExistingProjects(allExisting);
+        setSupabaseUiStep('choose');
+        return;
+      }
+    }
+
     if (paidOrg) {
       console.log('💰 [SUPABASE] Usando org PAGA:', paidOrg.slug);
       setNeedSpaceReason(null);
@@ -553,20 +577,32 @@ export default function InstallWizardPage() {
       setSupabaseUiStep('needspace');
       return;
     }
-    
-    const freeOrgWithSlot = preflight.organizations.find(
-      (o) => (o.plan || '').toLowerCase() === 'free' && o.activeCount < 2
-    );
+
     if (freeOrgWithSlot) {
       console.log('🆓 [SUPABASE] Usando org FREE com slot:', freeOrgWithSlot.slug, '- Projetos ativos:', freeOrgWithSlot.activeCount);
       setNeedSpaceReason(null);
       await createProjectInOrg(freeOrgWithSlot.slug, freeOrgWithSlot.activeProjects.map((p) => p.name));
       return;
     }
-    
+
     console.log('🚫 [SUPABASE] Sem slots disponíveis');
     setNeedSpaceReason('no_slot');
     setSupabaseUiStep('needspace');
+  };
+
+  const selectExistingProject = (proj: SupabaseProjectOption) => {
+    setSupabaseResolvedOk(false);
+    setSupabaseResolveError(null);
+    setSupabaseProjectRef(proj.ref);
+    setSupabaseRegion(proj.region || null);
+    setSupabaseUrl(proj.supabaseUrl || `https://${proj.ref}.supabase.co`);
+    setSupabaseUiStep('done');
+    // resolveKeys dispara automaticamente via useEffect quando supabaseUrl muda
+  };
+
+  const handleCreateNew = async () => {
+    if (!supabasePreflight) return;
+    await decideAndCreate(supabaseOrgs, supabasePreflight, true);
   };
   
   const createProjectInOrg = async (orgSlug: string, existingNames: string[]) => {
@@ -1392,6 +1428,51 @@ export default function InstallWizardPage() {
                   </motion.div>
                 )}
                 
+                {supabaseUiStep === 'choose' && (
+                  <motion.div key="supabase-choose" variants={sceneVariants} initial="initial" animate="animate" exit="exit" transition={sceneTransition}>
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 mb-4">
+                        <Sparkles className="w-8 h-8 text-cyan-400" />
+                      </div>
+                      <h1 className="text-2xl font-bold text-white mb-2">Qual projeto usar?</h1>
+                      <p className="text-slate-400 text-sm">Encontramos projetos existentes na sua conta. Selecione um ou crie um novo.</p>
+                    </div>
+
+                    <div className="space-y-3 mb-4">
+                      {supabaseExistingProjects.map((p) => (
+                        <div key={p.ref} className="flex items-center justify-between gap-4 bg-white/5 border border-white/10 rounded-xl p-4 hover:border-cyan-400/30 transition-colors">
+                          <div className="min-w-0">
+                            <div className="text-white font-medium truncate">{p.name}</div>
+                            <div className="text-slate-500 text-xs mt-0.5 truncate">
+                              {p.region ? `${p.region} · ` : ''}{p.orgName}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => selectExistingProject(p)}
+                            className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white font-medium text-sm transition-all shrink-0"
+                          >
+                            Usar este
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-start gap-3 bg-white/5 border border-white/10 rounded-xl p-4 mb-4 text-sm text-slate-400">
+                      <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                      <span>Para usar um projeto no Brasil, selecione o que está na região <span className="text-white font-medium">sa-east-1</span>.</span>
+                    </div>
+
+                    <button
+                      onClick={() => void handleCreateNew()}
+                      disabled={supabaseCreating || supabaseProvisioning}
+                      className="w-full py-3 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-colors text-sm disabled:opacity-50"
+                    >
+                      + Criar novo projeto
+                    </button>
+                    {supabaseCreateError && <div className="mt-4 rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-red-400 text-sm">{supabaseCreateError}</div>}
+                  </motion.div>
+                )}
+
                 {supabaseUiStep === 'needspace' && (
                   <motion.div key="supabase-needspace" variants={sceneVariants} initial="initial" animate="animate" exit="exit" transition={sceneTransition}>
                     <div className="text-center mb-6">
