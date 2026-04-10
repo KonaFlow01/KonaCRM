@@ -189,6 +189,9 @@ export default function InstallWizardPage() {
   } | null>(null);
   const [supabasePreflightLoading, setSupabasePreflightLoading] = useState(false);
   
+  // Flag: indica que o projeto foi selecionado pelo usuário (já existe) — não usar supabaseCreateDbPass
+  const isExistingProjectRef = useRef(false);
+
   // Timers
   const provisioningTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const provisioningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -591,6 +594,7 @@ export default function InstallWizardPage() {
   };
 
   const selectExistingProject = (proj: SupabaseProjectOption) => {
+    isExistingProjectRef.current = true; // Não reconstruir dbUrl com senha gerada aleatoriamente
     setSupabaseResolvedOk(false);
     setSupabaseResolveError(null);
     setSupabaseProjectRef(proj.ref);
@@ -907,6 +911,8 @@ export default function InstallWizardPage() {
       // IMPORTANT: For fresh projects we already know the DB password (supabaseCreateDbPass).
       // The CLI login-role URL can lack privileges for schema `storage`, causing false 'storage not ready' stalls.
       // So: keep postgres.<ref> user with our known password, but reuse the pooler host/port from the resolver.
+      // For EXISTING projects selected by the user, always use the dbUrl from the resolver as-is
+      // (supabaseCreateDbPass is a randomly generated password that doesn't match the existing project).
       if (data?.dbUrl) {
         try {
           const resolvedRef = String(data?.projectRef || ref || '').trim();
@@ -917,7 +923,7 @@ export default function InstallWizardPage() {
           const pgbouncer = u.searchParams.get('pgbouncer') || 'true';
           const sslmode = u.searchParams.get('sslmode') || 'require';
 
-          if (haveCreatePass && resolvedRef) {
+          if (haveCreatePass && resolvedRef && !isExistingProjectRef.current) {
             const user = `postgres.${resolvedRef}`;
             const rebuilt =
               `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(supabaseCreateDbPass)}` +
